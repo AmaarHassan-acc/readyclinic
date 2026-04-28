@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ReadyClinic ERP - Standalone</title>
+    <style>
+      :root {
+        --bg: #f4f7fb;
+        --card: #fff;
+        --border: #e3e8f2;
+        --text: #1d2a3a;
+        --brand: #2479ff;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; font-family: Inter, Arial, sans-serif; background: var(--bg); color: var(--text); }
+      .app { display: grid; grid-template-columns: 260px 1fr; min-height: 100vh; }
+      .sidebar { padding: 1rem; background: #10203b; color: #fff; }
+      .nav { display: block; width: 100%; margin: .35rem 0; padding: .55rem .7rem; border: 0; border-radius: 8px; text-align: start; background: #1c3159; color: #fff; cursor: pointer; }
+      .nav.active { background: var(--brand); }
+      main { padding: 1rem; }
+      .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; box-shadow: 0 8px 25px rgba(16,32,59,.05); }
+      .topbar { display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem; }
+      .metrics { display:grid; grid-template-columns: repeat(3,1fr); gap: .8rem; margin-bottom: 1rem; }
+      .grid.two { display:grid; grid-template-columns: 1fr 1fr; gap:.8rem; }
+      .stack { display:flex; flex-direction:column; gap:.55rem; }
+      .btn { border:0; background: var(--brand); color:#fff; padding:.55rem .8rem; border-radius:8px; cursor:pointer; }
+      .btn.secondary { background:#6b7588; }
+      .btn.small { padding:.35rem .6rem; }
+      .tabs { display:flex; gap:.5rem; margin: .3rem 0 .8rem; }
+      .tabs button { border:1px solid var(--border); background:#f1f4fa; padding:.4rem .6rem; border-radius: 8px; }
+      .tabs .active { background: #dce9ff; border-color: var(--brand); }
+      select,input,textarea { width:100%; padding:.55rem .6rem; border:1px solid var(--border); border-radius:8px; }
+      table { width:100%; border-collapse: collapse; }
+      th,td { border-bottom:1px solid var(--border); text-align:start; padding:.5rem; }
+      .toolbar { display:flex; gap:.5rem; align-items:center; margin-bottom:.7rem; }
+      .badge { padding:.25rem .45rem; border-radius:999px; font-size:12px; font-weight:600; }
+      .badge.unpaid { background:#ffebeb; color:#b13b3b; }
+      .badge.partial { background:#fff4d6; color:#8f6500; }
+      .badge.paid,.badge.done { background:#e6f8ea; color:#1f7d36; }
+      .badge.waiting { background:#e6f0ff; color:#2658b6; }
+      .badge.in_consultation { background:#efe8ff; color:#5d3bb1; }
+      .actions { display:flex; gap:.5rem; }
+      .service-list { display:grid; grid-template-columns: 1fr 1fr; gap:.4rem; }
+      .check-row { display:flex; gap:.4rem; align-items:center; border:1px solid var(--border); border-radius:8px; padding:.4rem; }
+      .modal { position:fixed; inset:0; background:rgba(0,0,0,.3); display:grid; place-items:center; }
+      .modal-body { width:min(460px,92vw); }
+      [dir='rtl'] .nav,[dir='rtl'] th,[dir='rtl'] td,[dir='rtl'] .topbar { text-align:right; }
+      @media (max-width: 980px) {
+        .app { grid-template-columns: 1fr; }
+        .sidebar { display:flex; gap:.4rem; overflow:auto; position:sticky; top:0; z-index:10; }
+        .sidebar h2 { display:none; }
+        .nav { width:auto; white-space:nowrap; }
+        .metrics, .grid.two, .service-list { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="app"></div>
+
+    <script>
+      const labels = {
+        en: { appName: 'ReadyClinic ERP', lang: 'العربية' },
+        ar: { appName: 'نظام العيادة', lang: 'English' }
+      };
+
+      const navOrder = ['PatientRegistration','SelectDoctorServices','InvoiceCreate','RegisterPayment','WaitingScreen','DoctorDashboard','ConsultationScreen','AddPrescription','AddExtraServices','PatientProfile'];
+      const doctors = [
+        { id: 'd1', name: 'Dr. Sara Kareem', specialty: 'Internal Medicine' },
+        { id: 'd2', name: 'Dr. Omar Khalid', specialty: 'Dermatology' },
+        { id: 'd3', name: 'Dr. Noor Hassan', specialty: 'Pediatrics' }
+      ];
+      const serviceCatalog = [
+        { id: 's1', name: 'General Consultation', price: 40 },
+        { id: 's2', name: 'Blood Test', price: 25 },
+        { id: 's3', name: 'X-Ray', price: 60 },
+        { id: 's4', name: 'ECG', price: 30 },
+        { id: 's5', name: 'Nebulizer Session', price: 20 }
+      ];
+
+      const state = {
+        lang: 'en',
+        activePage: 'PatientRegistration',
+        patients: [
+          { id: 'p100', name: 'Lina Maher', phone: '555-0193', age: 31, gender: 'Female', prescriptions: [] },
+          { id: 'p101', name: 'Hadi Sami', phone: '555-0172', age: 44, gender: 'Male', prescriptions: [] }
+        ],
+        selectedPatientId: 'p100',
+        visits: [],
+        selectedVisitId: null,
+        doctorFilter: 'all',
+        queueFilter: 'all',
+        registrationMode: 'existing',
+        newPatient: { name: '', phone: '', age: '', gender: 'Female' },
+        doctorSelection: doctors[0].id,
+        selectedServices: ['s1'],
+        paymentAmount: '',
+        prescription: { medicine: 'Amoxicillin 500mg', instructions: 'Twice daily after meals for 5 days' },
+        extraServiceId: 's2',
+        showModal: false
+      };
+
+      const app = document.getElementById('app');
+
+      function statusBadge(status) {
+        return `<span class="badge ${status}">${status}</span>`;
+      }
+
+      function setState(patch) { Object.assign(state, patch); render(); }
+
+      function selectedPatient() { return state.patients.find((p) => p.id === state.selectedPatientId); }
+      function selectedVisit() { return state.visits.find((v) => v.id === state.selectedVisitId) || state.visits[state.visits.length - 1] || null; }
+
+      function registerPatient() {
+        if (state.registrationMode === 'existing') return;
+        const id = `p${Math.floor(Math.random() * 900 + 1000)}`;
+        state.patients.push({ ...state.newPatient, id, age: Number(state.newPatient.age), prescriptions: [] });
+        state.selectedPatientId = id;
+        state.registrationMode = 'existing';
+      }
+
+      function createVisit() {
+        const services = state.selectedServices.map((id) => serviceCatalog.find((s) => s.id === id));
+        const visitId = `v${Math.floor(Math.random() * 90000 + 10000)}`;
+        const total = services.reduce((sum, s) => sum + s.price, 0);
+        state.visits.push({
+          id: visitId,
+          patientId: state.selectedPatientId,
+          doctorId: state.doctorSelection,
+          services,
+          extraServices: [],
+          queueStatus: 'unpaid',
+          consultationStatus: 'pending',
+          prescription: null,
+          invoice: { id: `inv-${visitId}`, lines: services, total, totalPaid: 0 },
+          payments: []
+        });
+        state.selectedVisitId = visitId;
+      }
+
+      function registerPayment() {
+        const visit = selectedVisit();
+        if (!visit) return;
+        const amount = Number(state.paymentAmount || 0);
+        visit.invoice.totalPaid = Math.min(visit.invoice.totalPaid + amount, visit.invoice.total);
+        visit.queueStatus = visit.invoice.totalPaid > 0 ? 'waiting' : 'unpaid';
+        visit.payments.push({ date: new Date().toISOString(), amount });
+      }
+
+      function startConsultation(id) {
+        const visit = state.visits.find((v) => v.id === id);
+        if (!visit) return;
+        visit.queueStatus = 'in_consultation';
+        visit.consultationStatus = 'active';
+        state.selectedVisitId = id;
+        state.activePage = 'ConsultationScreen';
+      }
+
+      function savePrescription() {
+        const visit = selectedVisit();
+        if (!visit) return;
+        visit.prescription = { ...state.prescription };
+        visit.queueStatus = 'done';
+        visit.consultationStatus = 'done';
+        const patient = state.patients.find((p) => p.id === visit.patientId);
+        patient.prescriptions.push({ ...state.prescription, visitId: visit.id, date: new Date().toLocaleDateString() });
+      }
+
+      function addExtraService() {
+        const visit = selectedVisit();
+        if (!visit) return;
+        const service = serviceCatalog.find((s) => s.id === state.extraServiceId);
+        visit.extraServices.push(service);
+        visit.invoice.lines.push(service);
+        visit.invoice.total = visit.invoice.lines.reduce((sum, s) => sum + s.price, 0);
+        state.showModal = false;
+      }
+
+      function pageContent() {
+        const patient = selectedPatient();
+        const visit = selectedVisit();
+        if (state.activePage === 'PatientRegistration') {
+          return `
+          <section class="grid two">
+            <article class="card">
+              <h3>PatientRegistration</h3>
+              <div class="tabs">
+                <button class="${state.registrationMode === 'existing' ? 'active' : ''}" onclick="setState({registrationMode:'existing'})">Existing</button>
+                <button class="${state.registrationMode === 'new' ? 'active' : ''}" onclick="setState({registrationMode:'new'})">New</button>
+              </div>
+              ${state.registrationMode === 'existing' ? `
+                <select onchange="setState({selectedPatientId:this.value})">${state.patients.map((p) => `<option ${p.id===state.selectedPatientId?'selected':''} value="${p.id}">${p.name} (${p.phone})</option>`).join('')}</select>
+              ` : `
+                <div class="stack">
+                  <input placeholder="Full name" value="${state.newPatient.name}" oninput="state.newPatient.name=this.value">
+                  <input placeholder="Phone" value="${state.newPatient.phone}" oninput="state.newPatient.phone=this.value">
+                  <input placeholder="Age" value="${state.newPatient.age}" oninput="state.newPatient.age=this.value">
+                  <select onchange="state.newPatient.gender=this.value"><option>Female</option><option>Male</option></select>
+                </div>
+              `}
+              <button class="btn" onclick="registerPatient();render();">Continue</button>
+            </article>
+            <article class="card"><h4>Patients</h4><table><thead><tr><th>Name</th><th>Phone</th><th>Age</th></tr></thead><tbody>${state.patients.map((p) => `<tr><td>${p.name}</td><td>${p.phone}</td><td>${p.age}</td></tr>`).join('')}</tbody></table></article>
+          </section>`;
+        }
+        if (state.activePage === 'SelectDoctorServices') {
+          return `<section class="grid two"><article class="card stack"><h3>SelectDoctorServices</h3><p>Patient: ${patient ? patient.name : 'None'}</p>
+          <select onchange="state.doctorSelection=this.value;render();">${doctors.map((d) => `<option ${d.id===state.doctorSelection?'selected':''} value="${d.id}">${d.name} - ${d.specialty}</option>`).join('')}</select>
+          <div class="service-list">${serviceCatalog.map((s)=>`<label class="check-row"><input type="checkbox" ${state.selectedServices.includes(s.id)?'checked':''} onchange="this.checked?state.selectedServices.push('${s.id}'):state.selectedServices=state.selectedServices.filter(id=>id!=='${s.id}');render();">${s.name} - $${s.price}</label>`).join('')}</div>
+          <button class="btn" onclick="createVisit();render();">Create visit</button></article>
+          <article class="card"><h4>Flow</h4><ul><li>Visit linked to patient, doctor, services, invoice.</li><li>Payment moves patient to waiting.</li></ul></article></section>`;
+        }
+        if (state.activePage === 'InvoiceCreate') {
+          if (!visit) return '<article class="card">No visit yet.</article>';
+          return `<article class="card"><h3>InvoiceCreate</h3><p>Invoice #${visit.invoice.id}</p><table><thead><tr><th>Service</th><th>Price</th></tr></thead><tbody>${visit.invoice.lines.map((l)=>`<tr><td>${l.name}</td><td>$${l.price}</td></tr>`).join('')}</tbody></table><p>Total: $${visit.invoice.total}</p><p>Paid: $${visit.invoice.totalPaid}</p><p>Balance: $${visit.invoice.total-visit.invoice.totalPaid}</p></article>`;
+        }
+        if (state.activePage === 'RegisterPayment') {
+          if (!visit) return '<article class="card">No invoice.</article>';
+          return `<article class="card stack"><h3>RegisterPayment</h3><p>Remaining: $${visit.invoice.total-visit.invoice.totalPaid}</p><input type="number" value="${state.paymentAmount}" oninput="state.paymentAmount=this.value"><button class="btn" onclick="registerPayment();render();">Register payment</button></article>`;
+        }
+        if (state.activePage === 'WaitingScreen') {
+          const q = state.queueFilter;
+          const queue = state.visits.filter((v)=> q==='all' || v.queueStatus===q);
+          return `<article class="card"><h3>WaitingScreen</h3><div class="toolbar"><select onchange="setState({queueFilter:this.value})"><option value="all">All</option><option value="waiting">Waiting</option><option value="in_consultation">In consultation</option><option value="done">Done</option></select></div><table><thead><tr><th>Patient</th><th>Doctor</th><th>Status</th></tr></thead><tbody>${queue.map((v)=>`<tr><td>${state.patients.find((p)=>p.id===v.patientId).name}</td><td>${doctors.find((d)=>d.id===v.doctorId).name}</td><td>${statusBadge(v.queueStatus)}</td></tr>`).join('')}</tbody></table></article>`;
+        }
+        if (state.activePage === 'DoctorDashboard') {
+          const filtered = state.visits.filter((v)=> (state.doctorFilter==='all'||v.doctorId===state.doctorFilter) && (v.queueStatus==='waiting'||v.queueStatus==='in_consultation'));
+          return `<article class="card"><h3>DoctorDashboard</h3><div class="toolbar"><select onchange="setState({doctorFilter:this.value})"><option value="all">All doctors</option>${doctors.map((d)=>`<option ${d.id===state.doctorFilter?'selected':''} value="${d.id}">${d.name}</option>`).join('')}</select></div><table><thead><tr><th>Doctor</th><th>Patient</th><th>Status</th><th></th></tr></thead><tbody>${filtered.map((v)=>`<tr><td>${doctors.find((d)=>d.id===v.doctorId).name}</td><td>${state.patients.find((p)=>p.id===v.patientId).name}</td><td>${statusBadge(v.queueStatus)}</td><td><button class="btn small" onclick="startConsultation('${v.id}');render();">Start</button></td></tr>`).join('')}</tbody></table></article>`;
+        }
+        if (state.activePage === 'ConsultationScreen') {
+          if (!visit) return '<article class="card">No active consultation.</article>';
+          return `<article class="card stack"><h3>ConsultationScreen</h3><p>Patient: ${state.patients.find((p)=>p.id===visit.patientId).name}</p><p>Doctor: ${doctors.find((d)=>d.id===visit.doctorId).name}</p><div class="actions"><button class="btn" onclick="setState({activePage:'AddPrescription'})">Add prescription</button><button class="btn secondary" onclick="setState({activePage:'AddExtraServices'})">Add extra service</button></div></article>`;
+        }
+        if (state.activePage === 'AddPrescription') {
+          if (!visit) return '<article class="card">No visit selected.</article>';
+          return `<article class="card stack"><h3>AddPrescription</h3><input value="${state.prescription.medicine}" oninput="state.prescription.medicine=this.value"><textarea rows="4" oninput="state.prescription.instructions=this.value">${state.prescription.instructions}</textarea><button class="btn" onclick="savePrescription();render();">Save to patient profile</button></article>`;
+        }
+        if (state.activePage === 'AddExtraServices') {
+          if (!visit) return '<article class="card">No visit selected.</article>';
+          const remaining = visit.invoice.total - visit.invoice.totalPaid;
+          return `<article class="card stack"><h3>AddExtraServices</h3><p>Current balance: $${remaining}</p><div class="toolbar"><select onchange="state.extraServiceId=this.value">${serviceCatalog.map((s)=>`<option ${s.id===state.extraServiceId?'selected':''} value="${s.id}">${s.name} - $${s.price}</option>`).join('')}</select><button class="btn" onclick="setState({showModal:true})">Add to invoice</button></div>${state.showModal?`<div class='modal'><div class='modal-body card'><h4>Confirm</h4><p>Updates same invoice and pending payment.</p><button class='btn' onclick='addExtraService();render();'>Confirm</button> <button class='btn secondary' onclick='setState({showModal:false})'>Cancel</button></div></div>`:''}</article>`;
+        }
+        if (state.activePage === 'PatientProfile') {
+          if (!patient) return '<article class="card">No patient selected.</article>';
+          const history = state.visits.filter((v)=>v.patientId===patient.id);
+          return `<section class="grid two"><article class="card stack"><h3>PatientProfile</h3><p>${patient.name} · ${patient.gender} · ${patient.age}</p><h4>Prescriptions</h4><ul>${patient.prescriptions.length?patient.prescriptions.map((rx)=>`<li>${rx.date}: ${rx.medicine} (${rx.instructions})</li>`).join(''):'<li>No prescriptions yet</li>'}</ul></article><article class="card"><h4>Visit History & Pending Payment</h4><table><thead><tr><th>Visit</th><th>Doctor</th><th>Total</th><th>Paid</th><th>Pending</th></tr></thead><tbody>${history.map((v)=>`<tr><td>${v.id}</td><td>${doctors.find((d)=>d.id===v.doctorId).name}</td><td>$${v.invoice.total}</td><td>$${v.invoice.totalPaid}</td><td>$${v.invoice.total-v.invoice.totalPaid}</td></tr>`).join('')}</tbody></table></article></section>`;
+        }
+      }
+
+      function render() {
+        const patient = selectedPatient();
+        const pending = state.visits.reduce((sum, v) => sum + Math.max(0, v.invoice.total - v.invoice.totalPaid), 0);
+        const revenue = state.visits.reduce((sum, v) => sum + v.invoice.totalPaid, 0);
+        const waiting = state.visits.filter((v) => v.queueStatus === 'waiting').length;
+        document.documentElement.lang = state.lang;
+        document.documentElement.dir = state.lang === 'ar' ? 'rtl' : 'ltr';
+
+        app.innerHTML = `
+          <div class="app">
+            <aside class="sidebar">
+              <h2>${labels[state.lang].appName}</h2>
+              ${navOrder.map((n) => `<button class="nav ${state.activePage===n?'active':''}" onclick="setState({activePage:'${n}'})">${n}</button>`).join('')}
+            </aside>
+            <main>
+              <header class="topbar card"><div><strong>${patient ? patient.name : 'No patient selected'}</strong><p>Visits: ${state.visits.length} · Waiting: ${waiting} · Pending: $${pending}</p></div><button class="btn" onclick="setState({lang: state.lang==='en'?'ar':'en'})">${labels[state.lang].lang}</button></header>
+              <section class="metrics"><article class="card"><h4>Revenue</h4><p>$${revenue}</p></article><article class="card"><h4>Pending</h4><p>$${pending}</p></article><article class="card"><h4>Current Queue</h4><p>${waiting}</p></article></section>
+              ${pageContent()}
+            </main>
+          </div>`;
+      }
+
+      render();
+    </script>
+  </body>
+</html>
